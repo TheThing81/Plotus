@@ -43,21 +43,28 @@ def anova_analysis():
     mc1 = multi.MultiComparison(data[var_x.get()], data[var_y.get()])
     result = mc1.tukeyhsd()
     t = result.summary().as_text()
-    print(t.split('\n'))
+    a_list = t.split('\n')
+    cols = a_list[2].split(' ')
+    cols = [col for col in cols if col != '']
+    df = pd.DataFrame(columns=cols)
+    for i in range(4, len(a_list) - 1):
+        items = []
+        for item in a_list[i].split(' '):
+            items.append(item)
+        items = [item for item in items if item != '']
+        df.loc[i-4] = items
 
+    formula = var_x.get() + '~' + var_y.get()
+    mod = ols(formula, data=data).fit()
 
-
-    # formula = var_x.get() + '~' + var_y.get()
-    # mod = ols(formula,
-    #           data=data).fit()
-    #
-    # print(mod.summary())
-    # aov_table = sm.stats.anova_lm(mod, typ=2)
-    # print(aov_table)
-    # writer = pd.ExcelWriter('Analysis/ANOVA.xlsx')
-    # res.to_excel(writer)
-    # writer.save()
-    # os.startfile('Analysis\ANOVA.xlsx')
+    #print(mod.summary())
+    aov_table = sm.stats.anova_lm(mod, typ=2)
+    #print(aov_table)
+    writer = pd.ExcelWriter('Analysis/ANOVA.xlsx')
+    aov_table.to_excel(writer, sheet_name='Sheet1', startcol=1)
+    df.to_excel(writer, sheet_name='Sheet1', startcol=7)
+    writer.save()
+    os.startfile('Analysis\ANOVA.xlsx')
 
 def load():
     global data
