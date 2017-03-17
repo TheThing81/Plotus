@@ -5,15 +5,59 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
+import statsmodels.stats.multicomp as multi
+
 sns.set_style('white')  # white, whitegrid, dark, darkgrid
 sns.set_context('notebook')
 
-if os.path.exists('Output'):
+import statsmodels.api as sm
+from statsmodels.formula.api import ols
+
+
+if os.path.exists('Plots'):
     pass
 else:
-    os.makedirs('Output/')
+    os.makedirs('Plots/')
+
+if os.path.exists('Analysis'):
+    pass
+else:
+    os.makedirs('Analysis/')
+
+def describe():
+    global data
+    if data is None:
+        return
+
+    writer = pd.ExcelWriter('Analysis/descriptive statistics.xlsx')
+    desc_data = data.describe()
+    desc_data.to_excel(writer)
+    writer.save()
+    os.startfile('Analysis\descriptive statistics.xlsx')
 
 
+def anova_analysis():
+    global data
+
+
+    mc1 = multi.MultiComparison(data[var_x.get()], data[var_y.get()])
+    result = mc1.tukeyhsd()
+    t = result.summary().as_text()
+    print(t.split('\n'))
+
+
+
+    # formula = var_x.get() + '~' + var_y.get()
+    # mod = ols(formula,
+    #           data=data).fit()
+    #
+    # print(mod.summary())
+    # aov_table = sm.stats.anova_lm(mod, typ=2)
+    # print(aov_table)
+    # writer = pd.ExcelWriter('Analysis/ANOVA.xlsx')
+    # res.to_excel(writer)
+    # writer.save()
+    # os.startfile('Analysis\ANOVA.xlsx')
 
 def load():
     global data
@@ -47,9 +91,9 @@ def plot_us():
         g.set_ylabel('Густина', color='black', fontsize=15, alpha=0.5)
         plt.legend(loc='upper right')
 
-        fig.savefig('Output/hist.pdf')
+        fig.savefig('Plots/hist.pdf')
         plt.close(fig)
-        os.startfile('Output\hist.pdf')
+        os.startfile('Plots\hist.pdf')
         return
 
     if plot_type == 'scatter':
@@ -61,9 +105,9 @@ def plot_us():
         plt.setp(a.ax_marg_y.patches, linewidth=1.0, color='#a9c8e8')
         a.ax_joint.set_xlabel(var_x.get(), fontsize=15, alpha=0.7)
         a.ax_joint.set_ylabel(var_y.get(), fontsize=15, alpha=0.7)
-        plt.savefig('Output/scatter.pdf')
+        plt.savefig('Plots/scatter.pdf')
         plt.close()
-        os.startfile('Output\scatter.pdf')
+        os.startfile('Plots\scatter.pdf')
 
         return
 
@@ -75,9 +119,9 @@ def plot_us():
         ax.set_xlabel(var_x.get(), color='#666666')
         plt.legend(loc=[0.8, 0.9])
         sns.despine()
-        fig.savefig('Output/barplot.pdf')
+        fig.savefig('Plots/barplot.pdf')
         plt.close(fig)
-        os.startfile('Output\\barplot.pdf')
+        os.startfile('Plots\\barplot.pdf')
         return
 
 
@@ -87,9 +131,9 @@ def plot_us():
         ax.set_xlabel(var_x.get(), color='#666666')
         plt.legend(loc=[0.8, 0.9])
         sns.despine()
-        fig.savefig('Output/countbar.pdf')
+        fig.savefig('Plots/countbar.pdf')
         plt.close(fig)
-        os.startfile('Output\\countbar.pdf')
+        os.startfile('Plots\\countbar.pdf')
         return
 
     if plot_type == 'violin':
@@ -99,9 +143,9 @@ def plot_us():
         ax.set_xlabel(var_x.get(), color='#666666')
         plt.legend(loc='upper right')
         sns.despine()
-        plt.savefig('Output/violin.pdf')
+        plt.savefig('Plots/violin.pdf')
         plt.close(fig)
-        os.startfile('Output\\violin.pdf')
+        os.startfile('Plots\\violin.pdf')
         return
 
 
@@ -120,9 +164,9 @@ def plot_us():
         ax.set_ylabel(var_y.get(), color='#666666')
         ax.set_xlabel(var_x.get(), color='#666666')
         sns.despine()
-        plt.savefig('Output/beeswarm.pdf')
+        plt.savefig('Plots/beeswarm.pdf')
         plt.close(fig)
-        os.startfile('Output\\beeswarm.pdf')
+        os.startfile('Plots\\beeswarm.pdf')
         return
 
 
@@ -134,6 +178,9 @@ root = Tk()
 
 root.wm_title("Plotus")
 ttk.Button(root, text="Load data", command=load).grid(row=0, column=0, columnspan=2)
+
+
+
 
 type_value = StringVar()
 ttk.Label(root, text='Choose plot type: ').grid(row=1, column=0)
@@ -157,11 +204,12 @@ ttk.Label(root, text='Choose \'by\' factor: ').grid(row=4, column=0)
 combo_by = ttk.Combobox(root, textvariable=var_by)
 combo_by.grid(row=4, column=1)
 
+ttk.Button(root, text='Plot', command=plot_us).grid(row=5, column=0, columnspan=2)
+ttk.Button(root, text='Describe', command=describe).grid(row=6, column=0, columnspan=2)
+ttk.Button(root, text='ANOVA', command=anova_analysis).grid(row=7, column=0, columnspan=2)
 
 
 
-
-ttk.Button(root, text='Plot!', command=plot_us).grid(row=5, column=0,columnspan=2)
 
 
 root.mainloop()
