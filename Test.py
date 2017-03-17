@@ -24,10 +24,21 @@ if os.path.exists('Analysis'):
 else:
     os.makedirs('Analysis/')
 
-def describe():
+
+def analyze_us():
     global data
     if data is None:
         return
+
+    method = combo_analysis.get()
+    if method == 'Descriptive stats':
+        describe()
+    elif method == 'ANOVA':
+        anova_analysis()
+
+
+def describe():
+    global data
 
     writer = pd.ExcelWriter('Analysis/descriptive statistics.xlsx')
     desc_data = data.describe()
@@ -39,32 +50,28 @@ def describe():
 def anova_analysis():
     global data
 
-
-    mc1 = multi.MultiComparison(data[var_x.get()], data[var_y.get()])
+    mc1 = multi.MultiComparison(data[var_formula.get().split('~')[0]], data[var_formula.get().split('~')[1]])
     result = mc1.tukeyhsd()
     t = result.summary().as_text()
     a_list = t.split('\n')
-    cols = a_list[2].split(' ')
-    cols = [col for col in cols if col != '']
+    cols = [col for col in a_list[2].split(' ') if col]
     df = pd.DataFrame(columns=cols)
     for i in range(4, len(a_list) - 1):
-        items = []
-        for item in a_list[i].split(' '):
-            items.append(item)
-        items = [item for item in items if item != '']
+
+        items = [item for item in a_list[i].split(' ') if item]
         df.loc[i-4] = items
 
-    formula = var_x.get() + '~' + var_y.get()
+    formula = var_formula.get()
     mod = ols(formula, data=data).fit()
 
-    #print(mod.summary())
+    # print(mod.summary())
     aov_table = sm.stats.anova_lm(mod, typ=2)
-    #print(aov_table)
     writer = pd.ExcelWriter('Analysis/ANOVA.xlsx')
     aov_table.to_excel(writer, sheet_name='Sheet1', startcol=1)
     df.to_excel(writer, sheet_name='Sheet1', startcol=7)
     writer.save()
     os.startfile('Analysis\ANOVA.xlsx')
+
 
 def load():
     global data
@@ -78,9 +85,16 @@ def load():
         values_list = ['None'] + data.columns.tolist()
         combo_by.config(values=values_list)
         combo_by.set(values_list[0])
-        types_list = ['histogram','scatter plot','bar plot', 'count bar', 'boxplot','violin','beeswarm']
+        types_list = ['Histogram', 'Scatter plot', 'Bar plot', 'Count bar', 'Boxplot', 'Violin plot', 'Beeswarm plot']
         type_combo.config(values=types_list)
         type_combo.set(types_list[0])
+        analysis_types = ['None', 'Descriptive stats', 'ANOVA']
+        combo_analysis.config(values=analysis_types)
+        combo_analysis.set(analysis_types[0])
+        palettes = ['Blues', 'coolwarm', 'GnBu_d',  'pastel', 'Set1',
+                    'summer', 'muted', 'Spectral', 'husl',  'copper', 'magma']
+        combo_palette.config(values=palettes)
+        combo_palette.set(palettes[0])
 def plot_us():
     fig, ax = plt.subplots(1, 1)
     by = var_by.get()
@@ -88,7 +102,7 @@ def plot_us():
         by = None
 
     plot_type = type_combo.get()
-    if plot_type == 'histogram':
+    if plot_type == 'Histogram':
 
         g = sns.distplot(data[var_x.get()], rug=True, rug_kws={'color': '#777777', 'alpha': 0.2},
                               hist_kws={'edgecolor': 'black', 'color': '#6899e8', 'label': 'розподіл'},
@@ -103,7 +117,7 @@ def plot_us():
         os.startfile('Plots\hist.pdf')
         return
 
-    if plot_type == 'scatter':
+    if plot_type == 'Scatter plot':
         a = sns.jointplot(var_x.get(), var_y.get(), data=data, kind='reg', color='#5394d6',
                           annot_kws={'fontsize': 14, 'loc': [-0.1, 0.85]},
                           marginal_kws={'rug': True, 'bins': 25, 'hist_kws': {'edgecolor': 'black'}},
@@ -118,9 +132,9 @@ def plot_us():
 
         return
 
-    if plot_type == 'bar':
+    if plot_type == 'Bar plot':
 
-        ax = sns.barplot(x=var_x.get(), y=var_y.get(), hue=by, data=data, palette='Blues',
+        ax = sns.barplot(x=var_x.get(), y=var_y.get(), hue=by, data=data, palette=combo_palette.get(),
                          errcolor='0.4', errwidth=1.1)
         ax.set_ylabel('Середнє значення ' + var_y.get(), color='#666666')
         ax.set_xlabel(var_x.get(), color='#666666')
@@ -132,8 +146,8 @@ def plot_us():
         return
 
 
-    if plot_type == 'count bar':
-        ax = sns.countplot(x=var_x.get(), hue=by, data=data, palette='Blues')
+    if plot_type == 'Count bar':
+        ax = sns.countplot(x=var_x.get(), hue=by, data=data, palette=combo_palette.get())
         ax.set_ylabel('Кількість', color='#666666')
         ax.set_xlabel(var_x.get(), color='#666666')
         plt.legend(loc=[0.8, 0.9])
@@ -143,9 +157,9 @@ def plot_us():
         os.startfile('Plots\\countbar.pdf')
         return
 
-    if plot_type == 'violin':
+    if plot_type == 'Violin plot':
 
-        ax = sns.violinplot(var_x.get(), var_y.get(), data=data, hue=by, scale='count', split=True, palette='Blues')
+        ax = sns.violinplot(var_x.get(), var_y.get(), data=data, hue=by, scale='count', split=True, palette=combo_palette.get())
         ax.set_ylabel(var_y.get(), color='#666666')
         ax.set_xlabel(var_x.get(), color='#666666')
         plt.legend(loc='upper right')
@@ -155,8 +169,7 @@ def plot_us():
         os.startfile('Plots\\violin.pdf')
         return
 
-
-    if plot_type == 'beeswarm':
+    if plot_type == 'Beeswarm plot':
         ax = sns.swarmplot(var_x.get(), var_y.get(), data=data, hue=by, alpha=0.7)
 
         mean_width = .5
@@ -177,16 +190,14 @@ def plot_us():
         return
 
 
-
 fig, ax = plt.subplots(1, 1)
 data = None
 
 root = Tk()
+root.resizable(0,0)
 
 root.wm_title("Plotus")
-ttk.Button(root, text="Load data", command=load).grid(row=0, column=0, columnspan=2)
-
-
+ttk.Button(root, text="Load data", command=load, width=39).grid(row=0, column=0, columnspan=3)
 
 
 type_value = StringVar()
@@ -211,9 +222,24 @@ ttk.Label(root, text='Choose \'by\' factor: ').grid(row=4, column=0)
 combo_by = ttk.Combobox(root, textvariable=var_by)
 combo_by.grid(row=4, column=1)
 
-ttk.Button(root, text='Plot', command=plot_us).grid(row=5, column=0, columnspan=2)
-ttk.Button(root, text='Describe', command=describe).grid(row=6, column=0, columnspan=2)
-ttk.Button(root, text='ANOVA', command=anova_analysis).grid(row=7, column=0, columnspan=2)
+ttk.Label(root, text='Choose palette:').grid(row=5, column=0)
+var_palette = StringVar()
+combo_palette = ttk.Combobox(root, textvariable=var_palette)
+combo_palette.grid(row=5, column=1)
+
+ttk.Button(root, text='Plot', command=plot_us, width=39).grid(row=6, column=0, columnspan=3)
+
+ttk.Label(root, text="Choose analysis:").grid(row=7, column=0)
+var_analysis = StringVar()
+combo_analysis = ttk.Combobox(root, textvariable=var_analysis)
+combo_analysis.grid(row=7, column=1)
+
+ttk.Label(root, text='Write formula x~y').grid(row=8, column=0)
+var_formula = StringVar()
+formula_analysis = ttk.Entry(root, textvariable=var_formula, width=23)
+formula_analysis.grid(row=8, column=1)
+
+ttk.Button(root, text='Analyze', command=analyze_us, width=39).grid(row=9, column=0, columnspan=3)
 
 
 
