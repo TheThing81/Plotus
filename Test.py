@@ -6,6 +6,8 @@ import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 import statsmodels.stats.multicomp as multi
+from scipy.stats.mstats import normaltest
+
 
 sns.set_style('white')  # white, whitegrid, dark, darkgrid
 sns.set_context('notebook')
@@ -33,8 +35,14 @@ def analyze_us():
     method = combo_analysis.get()
     if method == 'Descriptive stats':
         describe()
+    elif method == 'Normality test':
+        normality_test()
     elif method == 'ANOVA':
         anova_analysis()
+
+
+def print_status(text, color):
+    message.config(text=text, foreground=color)
 
 
 def describe():
@@ -45,6 +53,51 @@ def describe():
     desc_data.to_excel(writer)
     writer.save()
     os.startfile('Analysis\descriptive statistics.xlsx')
+
+
+def normality_test():
+    global data
+    formula = var_formula.get()
+    if formula == '':
+        print_status('Warning: Please, specify column names in formula.', 'red')
+        return
+    x_list = formula.split('~')[0].split('+')
+    y = None
+    try:
+        y = formula.split('~')[1]
+    except:
+        pass
+
+    test_list = []
+    p_value_list = []
+    index_list = []
+
+    for x in x_list:
+        if x not in data.columns:
+            print_status("Warning: No such continuous column.", 'red')
+            return
+        if y not in data.columns:
+            print_status('Warning: No such categorical column.', 'red')
+            return
+        if y is None:
+            test, p_value = normaltest(data[x])
+            test_list.append(test)
+            p_value_list.append(p_value)
+            index_list.append(x)
+        else:
+            for i in set(data[y]):
+                test, p_value = normaltest(data[data[y] == i][x])
+                test_list.append(test)
+                p_value_list.append(p_value)
+                index_list.append(x + '[' + i + ']')
+
+    df = pd.DataFrame({"D’Agostino and Pearson’s Normality Test": test_list, "p Value": p_value_list}, index=index_list)
+    writer = pd.ExcelWriter('Analysis/Normality.xlsx')
+    df.to_excel(writer, sheet_name='Sheet1', startcol=1)
+    # df.to_excel(writer, sheet_name='Sheet1', startcol=7)
+    writer.save()
+    print_status('Status: Normality test performed', 'black')
+    os.startfile('Analysis\\Normality.xlsx')
 
 
 def anova_analysis():
@@ -67,6 +120,8 @@ def anova_analysis():
     # print(mod.summary())
     aov_table = sm.stats.anova_lm(mod, typ=2)
     writer = pd.ExcelWriter('Analysis/ANOVA.xlsx')
+    caption = pd.DataFrame(columns=[var_formula.get().split('~')[0]])
+    caption.to_excel(writer, sheet_name='Sheet1')
     aov_table.to_excel(writer, sheet_name='Sheet1', startcol=1)
     df.to_excel(writer, sheet_name='Sheet1', startcol=7)
     writer.save()
@@ -88,13 +143,19 @@ def load():
         types_list = ['Histogram', 'Scatter plot', 'Bar plot', 'Count bar', 'Boxplot', 'Violin plot', 'Beeswarm plot']
         type_combo.config(values=types_list)
         type_combo.set(types_list[0])
-        analysis_types = ['None', 'Descriptive stats', 'ANOVA']
+        analysis_types = ['None', 'Descriptive stats', 'Normality test', 'ANOVA']
         combo_analysis.config(values=analysis_types)
         combo_analysis.set(analysis_types[0])
         palettes = ['Blues', 'coolwarm', 'GnBu_d',  'pastel', 'Set1',
                     'summer', 'muted', 'Spectral', 'husl',  'copper', 'magma']
         combo_palette.config(values=palettes)
         combo_palette.set(palettes[0])
+
+        for item in data.columns:
+            # insert each new item to the end of the listbox
+            listbox.insert('end', item)
+
+
 def plot_us():
     fig, ax = plt.subplots(1, 1)
     by = var_by.get()
@@ -144,7 +205,6 @@ def plot_us():
         plt.close(fig)
         os.startfile('Plots\\barplot.pdf')
         return
-
 
     if plot_type == 'Count bar':
         ax = sns.countplot(x=var_x.get(), hue=by, data=data, palette=combo_palette.get())
@@ -197,50 +257,85 @@ root = Tk()
 root.resizable(0,0)
 
 root.wm_title("Plotus")
-ttk.Button(root, text="Load data", command=load, width=39).grid(row=0, column=0, columnspan=3)
-
+ttk.Button(root, text="Load data", command=load, width=40).grid(row=0, column=0, columnspan=3, pady=5, padx=5)
 
 type_value = StringVar()
-ttk.Label(root, text='Choose plot type: ').grid(row=1, column=0)
+ttk.Label(root, text='Choose plot type: ').grid(row=1, column=0, sticky='W', padx=7)
 type_combo = ttk.Combobox(root, textvariable=type_value)
-type_combo.grid(row=1, column=1)
+type_combo.grid(row=1, column=1, padx=7)
 
-ttk.Label(root, text='Choose x-axis: ').grid(row=2, column=0)
+
+ttk.Label(root, text='Choose x-axis: ').grid(row=2, column=0, sticky='W', padx=7)
 var_x = StringVar()
 combo_x = ttk.Combobox(root, textvariable=var_x)
-combo_x.grid(row=2, column=1)
+combo_x.grid(row=2, column=1, padx=7)
 
 
 var_y = StringVar()
-ttk.Label(root, text='Choose y-axis: ').grid(row=3, column=0)
+ttk.Label(root, text='Choose y-axis: ').grid(row=3, column=0, sticky='W', padx=7)
 combo_y = ttk.Combobox(root, textvariable=var_y)
-combo_y.grid(row=3, column=1)
+combo_y.grid(row=3, column=1, padx=7)
 
 
 var_by = StringVar()
-ttk.Label(root, text='Choose \'by\' factor: ').grid(row=4, column=0)
+ttk.Label(root, text='Choose \'by\' factor: ').grid(row=4, column=0, sticky='W', padx=7)
 combo_by = ttk.Combobox(root, textvariable=var_by)
-combo_by.grid(row=4, column=1)
+combo_by.grid(row=4, column=1, padx=7)
 
-ttk.Label(root, text='Choose palette:').grid(row=5, column=0)
+ttk.Label(root, text='Choose palette:').grid(row=5, column=0, sticky='W', padx=7)
 var_palette = StringVar()
 combo_palette = ttk.Combobox(root, textvariable=var_palette)
-combo_palette.grid(row=5, column=1)
+combo_palette.grid(row=5, column=1, padx=7)
 
-ttk.Button(root, text='Plot', command=plot_us, width=39).grid(row=6, column=0, columnspan=3)
+ttk.Button(root, text='Plot', command=plot_us, width=40).grid(row=6, column=0, columnspan=3, padx=5, pady=5)
 
-ttk.Label(root, text="Choose analysis:").grid(row=7, column=0)
+listbox = Listbox(root, width=15, height=5)
+listbox.grid(row=7, column=0, rowspan=3, padx=5, pady=5)
+# create a vertical scrollbar to the right of the listbox
+yscroll = Scrollbar(command=listbox.yview, orient=VERTICAL)
+yscroll.grid(row=7, column=0, rowspan=3, sticky='nse')
+listbox.configure(yscrollcommand=yscroll.set)
+
+
+def on_select(evt):
+    w = evt.widget
+    index = int(w.curselection()[0])
+    value = w.get(index)
+    var_formula.set(var_formula.get() + value)
+
+listbox.bind('<<ListboxSelect>>', on_select)
+
+
+def add_plus():
+    var_formula.set(var_formula.get() + '+')
+
+def add_tilda():
+    var_formula.set(var_formula.get() + '~')
+
+ttk.Button(root, text='+', command=add_plus, width=6).grid(row=10, column=0, padx=8, pady=5, columnspan=1, sticky='W')
+ttk.Button(root, text='~', command=add_tilda, width=6).grid(row=10, column=0, padx=22, pady=5, columnspan=1, sticky='E')
+
+analysis_label = ttk.Label(root, text="Choose analysis:")
+analysis_label.grid(row=7, column=1, sticky='WS', padx=5)
+analysis_label.config(font=('default', 8))
 var_analysis = StringVar()
 combo_analysis = ttk.Combobox(root, textvariable=var_analysis)
-combo_analysis.grid(row=7, column=1)
+combo_analysis.grid(row=8, column=1, padx=7)
 
-ttk.Label(root, text='Write formula x~y').grid(row=8, column=0)
+formula_label = ttk.Label(root, text='Write formula:')
+formula_label.grid(row=9, column=1, sticky='WS', padx=5)
+formula_label.config(font=('default', 8))
 var_formula = StringVar()
 formula_analysis = ttk.Entry(root, textvariable=var_formula, width=23)
-formula_analysis.grid(row=8, column=1)
+formula_analysis.grid(row=10, column=1, padx=7)
 
-ttk.Button(root, text='Analyze', command=analyze_us, width=39).grid(row=9, column=0, columnspan=3)
+analyze_button = ttk.Button(root, text='Analyze', command=analyze_us, width=40)
+analyze_button.grid(row=11, column=0, columnspan=3, padx=5, pady=5)
 
+
+message = ttk.Label(root, text='Status: Ready')
+message.grid(row=12, column=0, columnspan=2, pady=2)
+message.config(font=('default', 7))
 
 
 
