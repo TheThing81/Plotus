@@ -52,9 +52,54 @@ def print_status(text, color):
 def describe():
     global data
 
+    categorical_columns = [col for col in data.columns if data[col].dtype == 'object']
+    continuous_columns = [col for col in data.columns if data[col].dtype != 'object']
+
+    formula = var_formula.get()
     writer = pd.ExcelWriter('Analysis/descriptive statistics.xlsx')
-    desc_data = data.describe()
-    desc_data.to_excel(writer)
+    col_number = 1
+    row_number = 1
+
+    if formula == '':
+        desc_data = data.describe()
+        desc_data.to_excel(writer, sheet_name='Sheet1', startcol=1)
+
+        for col in categorical_columns:
+            data[col].value_counts().to_frame().to_excel(writer, sheet_name='Sheet1', startrow=11, startcol=col_number)
+            col_number += 3
+
+    else:
+        x_list = formula.split('~')[0].split('+')
+        y = None
+        try:
+            y = formula.split('~')[1]
+        except:
+            pass
+        for x in x_list:
+            if x not in data.columns:
+                print_status("Warning: No such continuous column.", 'red')
+                return
+            if y is not None and y not in data.columns:
+                print_status('Warning: No such categorical column.', 'red')
+                return
+            if y is not None and data[y].dtype != 'object':
+                print_status('Warning: ~column has to be categorical.', 'red')
+                return
+            if y is None:
+                desc_data = data[x].describe().to_frame()
+                desc_data.to_excel(writer, sheet_name='Sheet1', startcol=col_number, startrow=row_number)
+                col_number += 3
+            elif y is not None and data[x].dtype != 'object':
+                group_data = data.groupby(y)[x].describe().to_frame()
+                group_data.to_excel(writer, sheet_name='Sheet1', startcol=col_number, startrow=row_number)
+                col_number += 4
+            else:
+                group_data = data.groupby(y)[x].value_counts().to_frame()
+                group_data.to_excel(writer, sheet_name='Sheet1', startcol=col_number, startrow=row_number)
+                col_number += 4
+
+
+
     writer.save()
     os.startfile('Analysis\descriptive statistics.xlsx')
 
