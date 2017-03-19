@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import statsmodels.stats.multicomp as multi
 from scipy.stats.mstats import normaltest
+from scipy.stats import f
+from numpy import mean
 
 
 sns.set_style('white')  # white, whitegrid, dark, darkgrid
@@ -36,8 +38,10 @@ def analyze_us():
     if method == 'Descriptive stats':
         describe()
     elif method == 'Normality test':
-        normality_test()
-    elif method == 'ANOVA':
+        normality()
+    elif method == 'Levene\'s equality of variance':
+        homogeneity()
+    elif method == 'ANOVA one-way':
         anova_analysis()
 
 
@@ -54,9 +58,11 @@ def describe():
     writer.save()
     os.startfile('Analysis\descriptive statistics.xlsx')
 
-
-def normality_test():
+def normality():
     global data
+
+    column_name = "D’Agostino and Pearson’s Normality Test"
+
     formula = var_formula.get()
     if formula == '':
         print_status('Warning: Please, specify column names in formula.', 'red')
@@ -76,7 +82,7 @@ def normality_test():
         if x not in data.columns:
             print_status("Warning: No such continuous column.", 'red')
             return
-        if y not in data.columns:
+        if y is not None and y not in data.columns:
             print_status('Warning: No such categorical column.', 'red')
             return
         if y is None:
@@ -86,18 +92,105 @@ def normality_test():
             index_list.append(x)
         else:
             for i in set(data[y]):
+
                 test, p_value = normaltest(data[data[y] == i][x])
+
                 test_list.append(test)
                 p_value_list.append(p_value)
                 index_list.append(x + '[' + i + ']')
 
-    df = pd.DataFrame({"D’Agostino and Pearson’s Normality Test": test_list, "p Value": p_value_list}, index=index_list)
+    df = pd.DataFrame({column_name: test_list, "p Value": p_value_list}, index=index_list)
     writer = pd.ExcelWriter('Analysis/Normality.xlsx')
     df.to_excel(writer, sheet_name='Sheet1', startcol=1)
     # df.to_excel(writer, sheet_name='Sheet1', startcol=7)
     writer.save()
     print_status('Status: Normality test performed', 'black')
     os.startfile('Analysis\\Normality.xlsx')
+
+def homogeneity():
+    global data
+
+    formula = var_formula.get()
+    if formula == '':
+        print_status('Warning: Please, specify column names in formula.', 'red')
+        return
+
+    x_list = formula.split('~')[0].split('+')
+    y = None
+    try:
+        y = formula.split('~')[1]
+    except:
+        pass
+
+    test_list = []
+    p_value_list = []
+    index_list = []
+
+    for x in x_list:
+        if x not in data.columns:
+            print_status("Warning: No such continuous column.", 'red')
+            return
+        if y is not None and y not in data.columns:
+            print_status('Warning: No such categorical column.', 'red')
+            return
+
+        series_list = []
+
+        for i in set(data[y]):
+            series_list.append(data[data[y] == i][x])
+
+        test_list.append(our_levene(series_list)[0])
+        p_value_list.append(our_levene(series_list)[1])
+        index_list.append(x)
+
+    df = pd.DataFrame({"Levene's W": test_list, "p Value": p_value_list}, index=index_list)
+    writer = pd.ExcelWriter('Analysis/Homogeneity.xlsx')
+    df.to_excel(writer, sheet_name='Sheet1', startcol=1)
+    # df.to_excel(writer, sheet_name='Sheet1', startcol=7)
+    writer.save()
+    print_status('Status: Levene\'s test performed', 'black')
+    os.startfile('Analysis\Homogeneity.xlsx')
+
+
+
+
+def our_levene(lists):
+    dev_from_group_mean = []
+    group_dev_mean = []
+    group_size = []
+    for i in lists:
+        dev_from_group_mean.append(abs(i - i.mean()))
+        group_dev_mean.append((abs(i - i.mean())).mean())
+        group_size.append(len(i))
+
+    grand_mean = mean(group_dev_mean)
+    dev_from_grand_mean = []
+    sums_of_dev_from_grand_mean = []
+
+    for i in dev_from_group_mean:
+        dev_from_grand_mean.append((i - grand_mean)**2)
+        sums_of_dev_from_grand_mean.append(((i - grand_mean)**2).sum())
+
+    sum_of_dev_from_grand_mean = sum(sums_of_dev_from_grand_mean)
+
+    effect = 0
+    for i in range(len(group_size)):
+        effect += (group_dev_mean[i] - grand_mean)**2 * group_size[i]
+
+    error = sum_of_dev_from_grand_mean - effect
+
+    df_effect = len(group_size) - 1
+    df_error = sum(group_size) - len(group_size)
+
+    mean_square_effect = effect / df_effect
+    mean_square_error = error / df_error
+
+    F_effect = mean_square_effect / mean_square_error
+
+    p_value = f.sf(F_effect, df_effect, df_error)
+
+    return F_effect, p_value
+
 
 
 def anova_analysis():
@@ -143,7 +236,7 @@ def load():
         types_list = ['Histogram', 'Scatter plot', 'Bar plot', 'Count bar', 'Boxplot', 'Violin plot', 'Beeswarm plot']
         type_combo.config(values=types_list)
         type_combo.set(types_list[0])
-        analysis_types = ['None', 'Descriptive stats', 'Normality test', 'ANOVA']
+        analysis_types = ['None', 'Descriptive stats', 'Normality test', 'Levene\'s equality of variance', 'ANOVA one-way']
         combo_analysis.config(values=analysis_types)
         combo_analysis.set(analysis_types[0])
         palettes = ['Blues', 'coolwarm', 'GnBu_d',  'pastel', 'Set1',
