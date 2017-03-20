@@ -9,6 +9,7 @@ import statsmodels.stats.multicomp as multi
 from scipy.stats.mstats import normaltest
 from scipy.stats import f
 from numpy import mean
+import missingno
 
 
 sns.set_style('white')  # white, whitegrid, dark, darkgrid
@@ -104,8 +105,7 @@ def describe():
     os.startfile('Analysis\descriptive statistics.xlsx')
 
 def normality():
-    global data
-
+    data_dropped_na = data.dropna()
     column_name = "D’Agostino and Pearson’s Normality Test"
 
     formula = var_formula.get()
@@ -124,21 +124,21 @@ def normality():
     index_list = []
 
     for x in x_list:
-        if x not in data.columns:
+        if x not in data_dropped_na.columns:
             print_status("Warning: No such continuous column.", 'red')
             return
-        if y is not None and y not in data.columns:
+        if y is not None and y not in data_dropped_na.columns:
             print_status('Warning: No such categorical column.', 'red')
             return
         if y is None:
-            test, p_value = normaltest(data[x])
+            test, p_value = normaltest(data_dropped_na[x])
             test_list.append(test)
             p_value_list.append(p_value)
             index_list.append(x)
         else:
-            for i in set(data[y]):
+            for i in set(data_dropped_na[y]):
 
-                test, p_value = normaltest(data[data[y] == i][x])
+                test, p_value = normaltest(data_dropped_na[data_dropped_na[y] == i][x])
 
                 test_list.append(test)
                 p_value_list.append(p_value)
@@ -153,7 +153,8 @@ def normality():
     os.startfile('Analysis\\Normality.xlsx')
 
 def homogeneity():
-    global data
+
+    data_dropped_na = data.dropna()
 
     formula = var_formula.get()
     if formula == '':
@@ -167,22 +168,26 @@ def homogeneity():
     except:
         pass
 
+    if y is None or data_dropped_na[y].dtype != 'object':
+        print_status('Warning: No categorical column selected', 'red')
+        return
+
     test_list = []
     p_value_list = []
     index_list = []
 
     for x in x_list:
-        if x not in data.columns:
+        if x not in data_dropped_na.columns:
             print_status("Warning: No such continuous column.", 'red')
             return
-        if y is not None and y not in data.columns:
+        if y is not None and y not in data_dropped_na.columns:
             print_status('Warning: No such categorical column.', 'red')
             return
 
         series_list = []
 
-        for i in set(data[y]):
-            series_list.append(data[data[y] == i][x])
+        for i in set(data_dropped_na[y]):
+            series_list.append(data_dropped_na[data_dropped_na[y] == i][x])
 
         test_list.append(our_levene(series_list)[0])
         p_value_list.append(our_levene(series_list)[1])
@@ -239,9 +244,9 @@ def our_levene(lists):
 
 
 def anova_analysis():
-    global data
+    data_dropped_na = data.dropna()
 
-    mc1 = multi.MultiComparison(data[var_formula.get().split('~')[0]], data[var_formula.get().split('~')[1]])
+    mc1 = multi.MultiComparison(data_dropped_na[var_formula.get().split('~')[0]], data_dropped_na[var_formula.get().split('~')[1]])
     result = mc1.tukeyhsd()
     t = result.summary().as_text()
     a_list = t.split('\n')
@@ -253,7 +258,7 @@ def anova_analysis():
         df.loc[i-4] = items
 
     formula = var_formula.get()
-    mod = ols(formula, data=data).fit()
+    mod = ols(formula, data=data_dropped_na).fit()
 
     # print(mod.summary())
     aov_table = sm.stats.anova_lm(mod, typ=2)
@@ -268,9 +273,20 @@ def anova_analysis():
 
 def load():
     global data
-    file = filedialog.askopenfile(parent=root, mode='rb', title='Choose your file')
+    file = filedialog.askopenfile(parent=root, mode='rb', title='Choose your file', filetypes=(("Excel files and .csv", "*.xlsx;*.xls;*.csv")
+                                                                                                                  ,("All files", "*.*")))
+
+
     if file is not None:
-        data = pd.read_excel(file)
+
+        if file.name.split('.')[-1] == 'csv':
+            data = pd.read_csv(file)
+        elif file.name.split('.')[-1] == 'xlsx' or file.name.split('.')[-1] == 'xls':
+            data = pd.read_excel(file)
+        else:
+            print_status("Warning: Unsupported file type", 'red')
+            return
+        print_status("Status: Data are successfully loaded", 'black')
         combo_x.config(values=data.columns.tolist())
         combo_x.set(data.columns[0])
         combo_y.config(values=data.columns.tolist())
@@ -278,7 +294,7 @@ def load():
         values_list = ['None'] + data.columns.tolist()
         combo_by.config(values=values_list)
         combo_by.set(values_list[0])
-        types_list = ['Histogram', 'Scatter plot', 'Bar plot', 'Count bar', 'Boxplot', 'Violin plot', 'Beeswarm plot']
+        types_list = ['Histogram', 'Scatter plot', 'Bar plot', 'Count bar', 'Boxplot', 'Violin plot', 'Beeswarm plot', 'Missing data with matrix', 'Missing data with bars', 'Missing data correlations']
         type_combo.config(values=types_list)
         type_combo.set(types_list[0])
         analysis_types = ['None', 'Descriptive stats', 'Normality test', 'Levene\'s equality of variance', 'ANOVA one-way']
@@ -300,10 +316,12 @@ def plot_us():
     if by == 'None':
         by = None
 
+    data_dropped_na = data.dropna()
+
     plot_type = type_combo.get()
     if plot_type == 'Histogram':
 
-        g = sns.distplot(data[var_x.get()], rug=True, rug_kws={'color': '#777777', 'alpha': 0.2},
+        g = sns.distplot(data_dropped_na[var_x.get()], rug=True, rug_kws={'color': '#777777', 'alpha': 0.2},
                               hist_kws={'edgecolor': 'black', 'color': '#6899e8', 'label': 'розподіл'},
                               kde_kws={'color': 'black', 'alpha': 0.2, 'label': 'ядрова оцінка густини'})
         sns.despine(left=True, bottom=True)  # видалити осі повністю
@@ -317,7 +335,7 @@ def plot_us():
         return
 
     if plot_type == 'Scatter plot':
-        a = sns.jointplot(var_x.get(), var_y.get(), data=data, kind='reg', color='#5394d6',
+        a = sns.jointplot(var_x.get(), var_y.get(), data=data_dropped_na, kind='reg', color='#5394d6',
                           annot_kws={'fontsize': 14, 'loc': [-0.1, 0.85]},
                           marginal_kws={'rug': True, 'bins': 25, 'hist_kws': {'edgecolor': 'black'}},
                           joint_kws={'scatter_kws': {'alpha': 0.7}})
@@ -333,7 +351,7 @@ def plot_us():
 
     if plot_type == 'Bar plot':
 
-        ax = sns.barplot(x=var_x.get(), y=var_y.get(), hue=by, data=data, palette=combo_palette.get(),
+        ax = sns.barplot(x=var_x.get(), y=var_y.get(), hue=by, data=data_dropped_na, palette=combo_palette.get(),
                          errcolor='0.4', errwidth=1.1)
         ax.set_ylabel('Середнє значення ' + var_y.get(), color='#666666')
         ax.set_xlabel(var_x.get(), color='#666666')
@@ -345,7 +363,7 @@ def plot_us():
         return
 
     if plot_type == 'Count bar':
-        ax = sns.countplot(x=var_x.get(), hue=by, data=data, palette=combo_palette.get())
+        ax = sns.countplot(x=var_x.get(), hue=by, data=data_dropped_na, palette=combo_palette.get())
         ax.set_ylabel('Кількість', color='#666666')
         ax.set_xlabel(var_x.get(), color='#666666')
         plt.legend(loc=[0.8, 0.9])
@@ -355,9 +373,21 @@ def plot_us():
         os.startfile('Plots\\countbar.pdf')
         return
 
+    if plot_type == 'Boxplot':
+
+        ax = sns.boxplot(var_x.get(), var_y.get(), data=data_dropped_na, hue=by, width=0.4, palette=combo_palette.get())
+        ax.set_ylabel(var_y.get(), color='#666666')
+        ax.set_xlabel(var_x.get(), color='#666666')
+        plt.legend(loc='upper right')
+        sns.despine()
+        plt.savefig('Plots/Boxplot.pdf')
+        plt.close(fig)
+        os.startfile('Plots\Boxplot.pdf')
+        return
+
     if plot_type == 'Violin plot':
 
-        ax = sns.violinplot(var_x.get(), var_y.get(), data=data, hue=by, scale='count', split=True, palette=combo_palette.get())
+        ax = sns.violinplot(var_x.get(), var_y.get(), data=data_dropped_na, hue=by, scale='count', split=True, palette=combo_palette.get())
         ax.set_ylabel(var_y.get(), color='#666666')
         ax.set_xlabel(var_x.get(), color='#666666')
         plt.legend(loc='upper right')
@@ -368,14 +398,14 @@ def plot_us():
         return
 
     if plot_type == 'Beeswarm plot':
-        ax = sns.swarmplot(var_x.get(), var_y.get(), data=data, hue=by, alpha=0.7)
+        ax = sns.swarmplot(var_x.get(), var_y.get(), data=data_dropped_na, hue=by, alpha=0.7, palette=combo_palette.get())
 
         mean_width = .5
 
         for tick, text in zip(ax.get_xticks(), ax.get_xticklabels()):
             sample_name = text.get_text()
 
-            mean_val = data[data[var_x.get()] == sample_name][var_y.get()].mean()
+            mean_val = data_dropped_na[data_dropped_na[var_x.get()] == sample_name][var_y.get()].mean()
 
             ax.plot([tick - mean_width / 2, tick + mean_width / 2], [mean_val, mean_val], lw=2, color='#777777')
 
@@ -385,6 +415,43 @@ def plot_us():
         plt.savefig('Plots/beeswarm.pdf')
         plt.close(fig)
         os.startfile('Plots\\beeswarm.pdf')
+        return
+
+    if plot_type == 'Missing data with matrix':
+        figsize = None
+        if len(data.columns) > 10:
+            figsize = (30, 27)
+        else:
+            figsize = (25, 10)
+
+        ax = missingno.matrix(data if len(data) < 500 else data.sample(500), inline=False, figsize=figsize)
+
+        plt.savefig('Plots/missing matrix.pdf')
+        plt.close(fig)
+        os.startfile('Plots\\missing matrix.pdf')
+        return
+
+    if plot_type == 'Missing data with bars':
+        figsize = None
+        if len(data.columns) > 10:
+            figsize = (30, 27)
+        else:
+            figsize = (25, 10)
+
+        ax = missingno.bar(data if len(data) < 500 else data.sample(500), inline=False, figsize=figsize)
+
+        plt.savefig('Plots/missing bars.pdf')
+        plt.close(fig)
+        os.startfile('Plots\\missing bars.pdf')
+        return
+
+    if plot_type == 'Missing data correlations':
+
+        ax = missingno.heatmap(data, inline=False, figsize=(25, 25))
+
+        plt.savefig('Plots/missing correlations.pdf')
+        plt.close(fig)
+        os.startfile('Plots\\missing correlations.pdf')
         return
 
 
